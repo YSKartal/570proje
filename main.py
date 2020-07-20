@@ -15,6 +15,10 @@ from sklearn import svm
 from sklearn.ensemble import RandomForestClassifier
 import lightgbm as lgb
 from datetime import datetime
+from sklearn.neural_network import MLPClassifier
+from sklearn.linear_model import SGDClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
 
 #%% Gerekli sınıflar
 class DataFrameImputer(TransformerMixin):
@@ -237,6 +241,9 @@ y_train = pd.read_csv("piu_train_label.csv")
 x_test = pd.read_csv("piu_test.csv")
 mapping = {'functional': 1, 'non functional': 0, 'functional needs repair':2}
 y_train = y_train.replace({'status_group': mapping})
+x_train = sort_wrt_id_drop_id(x_train,'id')
+y_train = sort_wrt_id_drop_id(y_train,'id')
+x_test = sort_wrt_id_drop_id(x_test,'id')
 
 print('initial: x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
 
@@ -249,11 +256,11 @@ colums_to_drop = collect_correlated_variables(x_train,0.9)
 x_train = remove_columns(x_train,colums_to_drop)
 x_test = remove_columns(x_test,colums_to_drop)
 print('column drop: x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
-
-"""columns_to_keep = apply_feature_importance(x_train,y_train,threshold=0.95)
-x_train = keep_columns(x_train,columns_to_keep)
-x_test = keep_columns(x_test,columns_to_keep)
 """
+columns_to_keep = apply_feature_importance(x_train,y_train,threshold=0.95)
+x_train = keep_columns(x_train,columns_to_keep)
+x_test = keep_columns(x_test,columns_to_keep)"""
+
 print('x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
 
 #%% classifierları test et
@@ -267,9 +274,14 @@ print(f"Log Res Acc: {acc}")
 
 depths = [2, 5, 10, 20, 30, 40]
 for d in depths:
-    RF = RandomForestClassifier(max_depth=d, random_state=0)
+    RF = RandomForestClassifier(max_depth=d, min_samples_leaf=4, n_estimators=200, random_state=0)
     acc= modelAcc(RF,x_train, y_train['status_group'],fold)
     print(f"Random Forest Acc for depth {d}: {acc}")
+
+#%% mss etkisi az
+clf = GaussianNB()
+acc= modelAcc(clf,x_train, y_train['status_group'],0.2)
+print(f"Log Res Acc: {acc}")
 
 
 #%% secilen classifier ile test verisinden sonuçları al
