@@ -14,6 +14,7 @@ from sklearn.svm import SVC
 from sklearn import svm
 from sklearn.ensemble import RandomForestClassifier
 import lightgbm as lgb
+from datetime import datetime
 
 #%% Gerekli sınıflar
 class DataFrameImputer(TransformerMixin):
@@ -173,6 +174,7 @@ def take_feature_importances(df, threshold=0.9):
 
 def keep_columns(train,keep_columns):
     return train[keep_columns]
+
 def apply_feature_importance(train,train_labels,threshold):
     second_round_zero_features, feature_importances = identify_zero_importance_features(train, train_labels)
     norm_feature_importances = take_feature_importances(feature_importances, threshold=0.95)
@@ -184,6 +186,26 @@ def remove_columns(train,to_drop):
     train = train.drop(columns=to_drop)
     return train
 
+def fitTransform(x_train, y_train, x_test):
+    x1 = DataFrameImputer().fit_transform(x_train)
+    y1 = DataFrameImputer().fit_transform(y_train)
+    x2 = DataFrameImputer().fit_transform(x_test)
+    return x1, y1, x2
+    print("fit transform done")
+
+def ohEncoding(x_train, x_test):
+    x1 = one_hot_encoding(x_train)
+    x2 = one_hot_encoding(x_test)
+    print("one hot encoding done")
+    return x1, x2
+
+def lEncoding(x_train, y_train, x_test):
+    x1 = label_encoding(x_train)
+    y1 = label_encoding(y_train)
+    x2 = label_encoding(x_test)
+    print("label encoding done")
+    return x1, y1, x2
+
 #%% model fonksiyonları
 def modelAcc(clf,X,y,fold):
     X_train,X_test,y_train,y_test=train_test_split(X,y,random_state=42,test_size=fold)
@@ -193,20 +215,20 @@ def modelAcc(clf,X,y,fold):
     #print(f'Accuracy : {acc}',)
     return acc
 
-def testClassifiers(X, y, fold):
-    LR = LogisticRegression()
-    acc= modelAcc(LR,X,y,fold)
-    print(f"Log Res Acc: {acc}")
 
-    SVML = svm.SVC(kernel='linear')
+def extractTestResults(clf, x_train,y_train,x_test):
+    testMapping = {1:'functional', 0:'non functional' , 2:'functional needs repair'}
 
+    clf.fit(x_train,y_train)
+    y_pre=clf.predict(x_test)
 
-    depths = [2, 5, 10, 20, 30]
-    for d in depths:
-        RF = RandomForestClassifier(max_depth=d, random_state=0)
-        acc= modelAcc(RF,X,y,fold)
-        print(f"Random Forest Acc for depth {d}: {acc}")
-
+    testDf = pd.DataFrame()
+    testDf['id'] = x_test['id']
+    testDf['status_group'] = y_pre
+    testDf = testDf.replace({'status_group': testMapping})
+    
+    testDf.to_csv(str(clf)+'.csv', columns=['id','status_group'],index=None,sep=',')
+    print(f"test result in file {str(clf)+'.csv'}")
 
 
 #%%  verileri oku
@@ -216,41 +238,56 @@ x_test = pd.read_csv("piu_test.csv")
 mapping = {'functional': 1, 'non functional': 0, 'functional needs repair':2}
 y_train = y_train.replace({'status_group': mapping})
 
-print('x_train data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1]))
-print('y_train data set has got {} rows and {} columns'.format(y_train.shape[0],y_train.shape[1]))
+print('initial: x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
 
-#Handling Missing Values
-x_train = DataFrameImputer().fit_transform(x_train)
-y_train = DataFrameImputer().fit_transform(y_train)
-x_test = DataFrameImputer().fit_transform(x_test)
-
-#Handling Encodingx
-#x_train = one_hot_encoding(x_train)
-#x_test = one_hot_encoding(x_test)
-
-x_train = label_encoding(x_train)
-y_train = label_encoding(y_train)
-x_test = label_encoding(x_test)
+x_train, y_train, x_test = fitTransform(x_train,y_train,x_test)
+#x_train, x_test = ohEncoding(x_train,x_test)
+x_train, y_train, x_test = lEncoding(x_train,y_train,x_test)
 
 
 colums_to_drop = collect_correlated_variables(x_train,0.9)
 x_train = remove_columns(x_train,colums_to_drop)
 x_test = remove_columns(x_test,colums_to_drop)
+print('column drop: x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
 
-print('x_train data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1]))
-print('x_test data set has got {} rows and {} columns'.format(x_test.shape[0],x_test.shape[1]))
-print('y_train data set has got {} rows and {} columns'.format(y_train.shape[0],y_train.shape[1]))
-
-columns_to_keep = apply_feature_importance(x_train,y_train,threshold=0.95)
+"""columns_to_keep = apply_feature_importance(x_train,y_train,threshold=0.95)
 x_train = keep_columns(x_train,columns_to_keep)
 x_test = keep_columns(x_test,columns_to_keep)
+"""
+print('x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
 
-print('x_train data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1]))
-print('x_test data set has got {} rows and {} columns'.format(x_test.shape[0],x_test.shape[1]))
-print('y_train data set has got {} rows and {} columns'.format(y_train.shape[0],y_train.shape[1]))
+#%% classifierları test et
+fold = 0.2
 
-#%% 
+LR = LogisticRegression()
+acc= modelAcc(LR,x_train, y_train['status_group'],fold)
+print(f"Log Res Acc: {acc}")
 
+#SVML = svm.SVC(kernel='linear')
+
+depths = [2, 5, 10, 20, 30, 40]
+for d in depths:
+    RF = RandomForestClassifier(max_depth=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"Random Forest Acc for depth {d}: {acc}")
+
+
+#%% secilen classifier ile test verisinden sonuçları al
+
+clf = RandomForestClassifier(max_depth=40, random_state=0)
+extractTestResults(clf, x_train, y_train['status_group'], x_test)
+
+
+
+
+
+
+
+
+
+
+
+#%%
 #Feature Scaling of datasets
 """st_x= StandardScaler(with_mean=False)
 x_train= st_x.fit_transform(x_train)
@@ -260,17 +297,25 @@ X_train = st_x.transform(x_train)
 #y_train= st_x.fit_transform(y_train)
 print('y_train data set has got {} rows and {} columns'.format(y_train.shape[0],y_train.shape[1]))
 """
+
+"""
+def testClassifier(clf, X, y, fold):
+    LR = LogisticRegression()
+    acc= modelAcc(LR,X,y,fold)
+    print(f"Log Res Acc: {acc}")
+
+    #SVML = svm.SVC(kernel='linear')
+
+    depths = [2, 5, 10, 20, 30]
+    for d in depths:
+        RF = RandomForestClassifier(max_depth=d, random_state=0)
+        acc= modelAcc(RF,X,y,fold)
+        print(f"Random Forest Acc for depth {d}: {acc}")
+"""
 #%%
 
-fold = 0.2
-testClassifiers(x_train,y_train['status_group'],fold)
 
 
 
 
 
-
-
-# %%
-
-# %%
