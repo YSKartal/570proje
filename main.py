@@ -13,6 +13,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.svm import SVC
 from sklearn import svm
 from sklearn.ensemble import RandomForestClassifier
+import lightgbm as lgb
 
 #%% Gerekli sınıflar
 class DataFrameImputer(TransformerMixin):
@@ -76,6 +77,112 @@ def feature_hasher(x_train):
     train = hashing.transform(X_train_hash.values)
     return train
 
+def sort_wrt_id_drop_id(train,id_column_name):
+    train.sort_values(id_column_name)
+    return  train.drop(columns=[id_column_name])
+
+def collect_correlated_variables(train,treshold):
+    threshold = 0.9
+    corr_matrix = train.corr().abs()
+    #corr_matrix.head()
+    # Upper triangle of correlations
+    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(np.bool))
+    #upper.head()
+    # Select columns with correlations above threshold
+    to_drop = [column for column in upper.columns if any(upper[column] > threshold)]
+    print('There are %d columns to remove.' % (len(to_drop)))
+    return to_drop
+
+
+def identify_zero_importance_features(train, train_labels, iterations=2):
+    train_labels_ravel = train_labels.values.ravel()
+    """
+    Identify zero importance features in a training dataset based on the
+    feature importances from a gradient boosting model.
+
+    Parameters
+    --------
+    train : dataframe
+        Training features
+
+    train_labels : np.array
+        Labels for training data
+
+    iterations : integer, default = 2
+        Number of cross validation splits to use for determining feature importances
+    """
+
+    # Initialize an empty array to hold feature importances
+    feature_importances = np.zeros(train.shape[1])
+
+    # Create the model with several hyperparameters
+    model = lgb.LGBMClassifier(objective='binary', boosting_type='goss', n_estimators=10000, class_weight='balanced')
+
+    # Fit the model multiple times to avoid overfitting
+    for i in range(iterations):
+        # Split into training and validation set
+        train_features, valid_features, train_y, valid_y = train_test_split(train, train_labels_ravel, test_size=0.25,
+                                                                            random_state=i)
+
+        # Train using early stopping
+        model.fit(train_features, train_y, early_stopping_rounds=100, eval_set=[(valid_features, valid_y)],
+                  eval_metric='multi_logloss', verbose=200)
+    #eval function internette auc idi hata verdi, multi_logloss yaptim, arity de oluyormus
+        # Record the feature importances
+        feature_importances += model.feature_importances_ / iterations
+
+    feature_importances = pd.DataFrame({'feature': list(train.columns), 'importance': feature_importances}).sort_values(
+        'importance', ascending=False)
+
+    # Find the features with zero importance
+    zero_features = list(feature_importances[feature_importances['importance'] == 0.0]['feature'])
+    print('\nThere are %d features with 0.0 importance' % len(zero_features))
+
+    return zero_features, feature_importances
+
+
+def take_feature_importances(df, threshold=0.9):
+    """
+    Plots 15 most important features and the cumulative importance of features.
+    Prints the number of features needed to reach threshold cumulative importance.
+
+    Parameters
+    --------
+    df : dataframe
+        Dataframe of feature importances. Columns must be feature and importance
+    threshold : float, default = 0.9
+        Threshold for prining information about cumulative importances
+
+    Return
+    --------
+    df : dataframe
+        Dataframe ordered by feature importances with a normalized column (sums to 1)
+        and a cumulative importance column
+
+    """
+
+    # Sort features according to importance
+    df = df.sort_values('importance', ascending=False).reset_index()
+
+    # Normalize the feature importances to add up to one
+    df['importance_normalized'] = df['importance'] / df['importance'].sum()
+    df['cumulative_importance'] = np.cumsum(df['importance_normalized'])
+    importance_index = np.min(np.where(df['cumulative_importance'] > threshold))
+    print('%d features required for %0.2f of cumulative importance' % (importance_index , threshold))
+    return df
+
+def keep_columns(train,keep_columns):
+    return train[keep_columns]
+def apply_feature_importance(train,train_labels,threshold):
+    second_round_zero_features, feature_importances = identify_zero_importance_features(train, train_labels)
+    norm_feature_importances = take_feature_importances(feature_importances, threshold=0.95)
+    features_to_keep = list(
+        norm_feature_importances[norm_feature_importances['cumulative_importance'] < threshold]['feature'])
+    return features_to_keep
+
+def remove_columns(train,to_drop):
+    train = train.drop(columns=to_drop)
+    return train
 
 #%% model fonksiyonları
 def modelAcc(clf,X,y,fold):
@@ -83,30 +190,34 @@ def modelAcc(clf,X,y,fold):
     clf.fit(X_train,y_train)
     y_pre=clf.predict(X_test)
     acc = accuracy_score(y_test,y_pre)
-    print(f'Accuracy : {acc}',)
+    #print(f'Accuracy : {acc}',)
     return acc
 
-def logistic(X,y):
-    X_train,X_test,y_train,y_test=train_test_split(X,y,random_state=42,test_size=0.2)
-    lr=LogisticRegression()
-    lr.fit(X_train,y_train)
-    y_pre=lr.predict(X_test)
-    print('Accuracy : ',accuracy_score(y_test,y_pre))
+def testClassifiers(X, y, fold):
+    LR = LogisticRegression()
+    acc= modelAcc(LR,X,y,fold)
+    print(f"Log Res Acc: {acc}")
+
+    SVML = svm.SVC(kernel='linear')
+
+
+    depths = [2, 5, 10, 20, 30]
+    for d in depths:
+        RF = RandomForestClassifier(max_depth=d, random_state=0)
+        acc= modelAcc(RF,X,y,fold)
+        print(f"Random Forest Acc for depth {d}: {acc}")
 
 
 
-
-#%%
-
+#%%  verileri oku
 x_train = pd.read_csv("piu_train.csv")
 y_train = pd.read_csv("piu_train_label.csv")
 x_test = pd.read_csv("piu_test.csv")
+mapping = {'functional': 1, 'non functional': 0, 'functional needs repair':2}
+y_train = y_train.replace({'status_group': mapping})
 
 print('x_train data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1]))
 print('y_train data set has got {} rows and {} columns'.format(y_train.shape[0],y_train.shape[1]))
-
-
-
 
 #Handling Missing Values
 x_train = DataFrameImputer().fit_transform(x_train)
@@ -114,44 +225,52 @@ y_train = DataFrameImputer().fit_transform(y_train)
 x_test = DataFrameImputer().fit_transform(x_test)
 
 #Handling Encodingx
-x_train = one_hot_encoding(x_train)
-x_test = one_hot_encoding(x_test)
-#print(x_train)
-#print(y_train)
-#print(x_test)
+#x_train = one_hot_encoding(x_train)
+#x_test = one_hot_encoding(x_test)
 
-#%%
-######################################################################################
-#x_test.to_csv("Edited_test_set_values.csv")
-#save_df_to_file(x_train,"Edited_trainning_set_values.csv")
-#x_train.to_csv("Edited_trainning_set_values.csv")
-#y_train.to_csv("Edited_test_trainning_set_labels.csv")
+x_train = label_encoding(x_train)
+y_train = label_encoding(y_train)
+x_test = label_encoding(x_test)
 
-mapping = {'functional': 1, 'non functional': 0, 'functional needs repair':2}
-y_train = y_train.replace({'status_group': mapping})
+
+colums_to_drop = collect_correlated_variables(x_train,0.9)
+x_train = remove_columns(x_train,colums_to_drop)
+x_test = remove_columns(x_test,colums_to_drop)
+
+print('x_train data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1]))
+print('x_test data set has got {} rows and {} columns'.format(x_test.shape[0],x_test.shape[1]))
+print('y_train data set has got {} rows and {} columns'.format(y_train.shape[0],y_train.shape[1]))
+
+columns_to_keep = apply_feature_importance(x_train,y_train,threshold=0.95)
+x_train = keep_columns(x_train,columns_to_keep)
+x_test = keep_columns(x_test,columns_to_keep)
+
+print('x_train data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1]))
+print('x_test data set has got {} rows and {} columns'.format(x_test.shape[0],x_test.shape[1]))
+print('y_train data set has got {} rows and {} columns'.format(y_train.shape[0],y_train.shape[1]))
+
+#%% 
 
 #Feature Scaling of datasets
-st_x= StandardScaler(with_mean=False)
+"""st_x= StandardScaler(with_mean=False)
 x_train= st_x.fit_transform(x_train)
 print(' X train data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1]))
 X_train = st_x.transform(x_train)
 #X_test = st_x.transform(x_test)
 #y_train= st_x.fit_transform(y_train)
 print('y_train data set has got {} rows and {} columns'.format(y_train.shape[0],y_train.shape[1]))
-
+"""
 #%%
 
-LR = LogisticRegression()
-SVML = svm.SVC(kernel='linear')
-RF = RandomForestClassifier(max_depth=20, random_state=0)
 fold = 0.2
-modelAcc(RF,x_train,y_train['status_group'],fold)
-#logistic(x_train,y_train['status_group'])
+testClassifiers(x_train,y_train['status_group'],fold)
+
+
+
 
 
 
 
 # %%
-import torch
 
 # %%
