@@ -19,6 +19,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.linear_model import SGDClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
+from sklearn import tree
 
 #%% Gerekli sınıflar
 class DataFrameImputer(TransformerMixin):
@@ -83,7 +84,7 @@ def feature_hasher(x_train):
     return train
 
 def sort_wrt_id_drop_id(train,id_column_name):
-    train.sort_values(id_column_name)
+    #train.sort_values(id_column_name)
     return  train.drop(columns=[id_column_name])
 
 def collect_correlated_variables(train,treshold):
@@ -220,18 +221,18 @@ def modelAcc(clf,X,y,fold):
     return acc
 
 
-def extractTestResults(clf, x_train,y_train,x_test):
+def extractTestResults(clf, x_train,y_train,x_test,x_test_or):
     testMapping = {1:'functional', 0:'non functional' , 2:'functional needs repair'}
 
     clf.fit(x_train,y_train)
     y_pre=clf.predict(x_test)
 
     testDf = pd.DataFrame()
-    testDf['id'] = x_test['id']
+    testDf['id'] = x_test_or['id']
     testDf['status_group'] = y_pre
     testDf = testDf.replace({'status_group': testMapping})
     
-    testDf.to_csv(str(clf)+'.csv', columns=['id','status_group'],index=None,sep=',')
+    testDf.to_csv("rf2_40_100"+'.csv', columns=['id','status_group'],index=None,sep=',')
     print(f"test result in file {str(clf)+'.csv'}")
 
 
@@ -239,6 +240,7 @@ def extractTestResults(clf, x_train,y_train,x_test):
 x_train = pd.read_csv("piu_train.csv")
 y_train = pd.read_csv("piu_train_label.csv")
 x_test = pd.read_csv("piu_test.csv")
+x_test_or = pd.read_csv("piu_test.csv")
 mapping = {'functional': 1, 'non functional': 0, 'functional needs repair':2}
 y_train = y_train.replace({'status_group': mapping})
 x_train = sort_wrt_id_drop_id(x_train,'id')
@@ -256,10 +258,10 @@ colums_to_drop = collect_correlated_variables(x_train,0.9)
 x_train = remove_columns(x_train,colums_to_drop)
 x_test = remove_columns(x_test,colums_to_drop)
 print('column drop: x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
-"""
+
 columns_to_keep = apply_feature_importance(x_train,y_train,threshold=0.95)
 x_train = keep_columns(x_train,columns_to_keep)
-x_test = keep_columns(x_test,columns_to_keep)"""
+x_test = keep_columns(x_test,columns_to_keep)
 
 print('x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
 
@@ -270,11 +272,45 @@ LR = LogisticRegression()
 acc= modelAcc(LR,x_train, y_train['status_group'],fold)
 print(f"Log Res Acc: {acc}")
 
+clf = GaussianNB()
+acc= modelAcc(clf,x_train, y_train['status_group'],fold)
+print(f"GaussianNB  Acc: {acc}")
+
+clf = KNeighborsClassifier()
+acc= modelAcc(clf,x_train, y_train['status_group'],fold)
+print(f"KNeighbor  Acc: {acc}")
+
+RF = RandomForestClassifier(random_state=0)
+acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+print(f"Random Forest Acc : {acc}")
+
+clf = tree.DecisionTreeClassifier()
+acc= modelAcc(clf,x_train, y_train['status_group'],fold)
+print(f"DecisionTree  Acc: {acc}")
 #SVML = svm.SVC(kernel='linear')
 
-depths = [2, 5, 10, 20, 30, 40]
+clf =MLPClassifier( random_state=1)
+acc= modelAcc(clf,x_train, y_train['status_group'],fold)
+print(f"MLPClassifier  Acc: {acc}")
+
+
+#%%
+depths = [1, 2, 4, 6, 8, 10]
 for d in depths:
-    RF = RandomForestClassifier(max_depth=d, min_samples_leaf=4, n_estimators=200, random_state=0)
+    RF = RandomForestClassifier( min_samples_leaf=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"Random Forest Acc for mss {d}: {acc}")
+
+depths = [10, 20, 40, 60, 80, 100, 150, 200]
+for d in depths:
+    RF = RandomForestClassifier( min_samples_leaf=2, n_estimators=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"Random Forest Acc for tree {d}: {acc}")
+
+
+depths = [2, 5, 10, 20, 30, 40, 50]
+for d in depths:
+    RF = RandomForestClassifier(min_samples_leaf=2, n_estimators=100,max_depth=d, random_state=0)
     acc= modelAcc(RF,x_train, y_train['status_group'],fold)
     print(f"Random Forest Acc for depth {d}: {acc}")
 
@@ -286,8 +322,8 @@ print(f"Log Res Acc: {acc}")
 
 #%% secilen classifier ile test verisinden sonuçları al
 
-clf = RandomForestClassifier(max_depth=40, random_state=0)
-extractTestResults(clf, x_train, y_train['status_group'], x_test)
+clf = RandomForestClassifier(min_samples_leaf=2, n_estimators=100,max_depth=40, random_state=0)
+extractTestResults(clf, x_train, y_train['status_group'], x_test, x_test_or)
 
 
 
