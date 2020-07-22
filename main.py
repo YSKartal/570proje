@@ -232,7 +232,7 @@ def extractTestResults(clf, x_train,y_train,x_test,x_test_or):
     testDf['status_group'] = y_pre
     testDf = testDf.replace({'status_group': testMapping})
     
-    testDf.to_csv("rf2_40_100"+'.csv', columns=['id','status_group'],index=None,sep=',')
+    testDf.to_csv("rf2_100"+'.csv', columns=['id','status_group'],index=None,sep=',')
     print(f"test result in file {str(clf)+'.csv'}")
 
 
@@ -250,10 +250,10 @@ x_test = sort_wrt_id_drop_id(x_test,'id')
 print('initial: x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
 
 x_train, y_train, x_test = fitTransform(x_train,y_train,x_test)
-#x_train, x_test = ohEncoding(x_train,x_test)
-x_train, y_train, x_test = lEncoding(x_train,y_train,x_test)
+x_train, x_test = ohEncoding(x_train,x_test)
+#x_train, y_train, x_test = lEncoding(x_train,y_train,x_test)
 
-
+"""
 colums_to_drop = collect_correlated_variables(x_train,0.9)
 x_train = remove_columns(x_train,colums_to_drop)
 x_test = remove_columns(x_test,colums_to_drop)
@@ -264,7 +264,7 @@ x_train = keep_columns(x_train,columns_to_keep)
 x_test = keep_columns(x_test,columns_to_keep)
 
 print('x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
-
+"""
 #%% classifierları test et
 fold = 0.2
 
@@ -273,7 +273,7 @@ acc= modelAcc(LR,x_train, y_train['status_group'],fold)
 print(f"Log Res Acc: {acc}")
 
 clf = GaussianNB()
-acc= modelAcc(clf,x_train, y_train['status_group'],fold)
+#acc= modelAcc(clf,x_train, y_train['status_group'],fold)
 print(f"GaussianNB  Acc: {acc}")
 
 clf = KNeighborsClassifier()
@@ -314,6 +314,26 @@ for d in depths:
     acc= modelAcc(RF,x_train, y_train['status_group'],fold)
     print(f"Random Forest Acc for depth {d}: {acc}")
 
+#%%
+depths = [1, 2, 4, 6, 8, 10]
+for d in depths:
+    RF = RandomForestClassifier( min_samples_leaf=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"Random Forest Acc for mss {d}: {acc}")
+
+depths = [10, 20, 40, 60, 80, 100, 150, 200]
+for d in depths:
+    RF = RandomForestClassifier( min_samples_leaf=1, n_estimators=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"Random Forest Acc for tree {d}: {acc}")
+
+
+depths = [2, 5, 10, 20, 30, 40, 50]
+for d in depths:
+    RF = RandomForestClassifier(min_samples_leaf=1, n_estimators=100,max_depth=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"Random Forest Acc for depth {d}: {acc}")
+
 #%% mss etkisi az
 clf = GaussianNB()
 acc= modelAcc(clf,x_train, y_train['status_group'],0.2)
@@ -322,7 +342,7 @@ print(f"Log Res Acc: {acc}")
 
 #%% secilen classifier ile test verisinden sonuçları al
 
-clf = RandomForestClassifier(min_samples_leaf=2, n_estimators=100,max_depth=40, random_state=0)
+clf = RandomForestClassifier(min_samples_leaf=2, n_estimators=100, random_state=0)
 extractTestResults(clf, x_train, y_train['status_group'], x_test, x_test_or)
 
 
