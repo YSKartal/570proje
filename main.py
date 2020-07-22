@@ -199,8 +199,11 @@ def fitTransform(x_train, y_train, x_test):
     print("fit transform done")
 
 def ohEncoding(x_train, x_test):
-    x1 = one_hot_encoding(x_train)
-    x2 = one_hot_encoding(x_test)
+    result = one_hot_encoding(pd.concat([x_train,x_test]))
+    """x1 = one_hot_encoding(x_train)
+    x2 = one_hot_encoding(x_test)"""
+    x1 = result[:59400,:]
+    x2 = result[59400:,:]
     print("one hot encoding done")
     return x1, x2
 
@@ -223,6 +226,12 @@ def modelAcc(clf,X,y,fold):
 
 def extractTestResults(clf, x_train,y_train,x_test,x_test_or):
     testMapping = {1:'functional', 0:'non functional' , 2:'functional needs repair'}
+
+    testCols = x_test.columns
+    trainCols = x_train.columns
+    for trc in trainCols:
+        if trc not in trainCols:
+            x_train.drop(trc)
 
     clf.fit(x_train,y_train)
     y_pre=clf.predict(x_test)
