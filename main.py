@@ -227,11 +227,6 @@ def modelAcc(clf,X,y,fold):
 def extractTestResults(clf, x_train,y_train,x_test,x_test_or):
     testMapping = {1:'functional', 0:'non functional' , 2:'functional needs repair'}
 
-    testCols = x_test.columns
-    trainCols = x_train.columns
-    for trc in trainCols:
-        if trc not in trainCols:
-            x_train.drop(trc)
 
     clf.fit(x_train,y_train)
     y_pre=clf.predict(x_test)
@@ -241,7 +236,7 @@ def extractTestResults(clf, x_train,y_train,x_test,x_test_or):
     testDf['status_group'] = y_pre
     testDf = testDf.replace({'status_group': testMapping})
     
-    testDf.to_csv("rf2_100"+'.csv', columns=['id','status_group'],index=None,sep=',')
+    testDf.to_csv("rf2_100_top10"+'.csv', columns=['id','status_group'],index=None,sep=',')
     print(f"test result in file {str(clf)+'.csv'}")
 
 
@@ -259,9 +254,11 @@ x_test = sort_wrt_id_drop_id(x_test,'id')
 print('initial: x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
 
 x_train, y_train, x_test = fitTransform(x_train,y_train,x_test)
-x_train, x_test = ohEncoding(x_train,x_test)
-#x_train, y_train, x_test = lEncoding(x_train,y_train,x_test)
-
+#x_train, x_test = ohEncoding(x_train,x_test)
+x_train, y_train, x_test = lEncoding(x_train,y_train,x_test)
+"""
+x_train = x_train[:35000]
+y_train = y_train[:35000]
 """
 colums_to_drop = collect_correlated_variables(x_train,0.9)
 x_train = remove_columns(x_train,colums_to_drop)
@@ -273,7 +270,9 @@ x_train = keep_columns(x_train,columns_to_keep)
 x_test = keep_columns(x_test,columns_to_keep)
 
 print('x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
-"""
+
+
+
 #%% classifierları test et
 fold = 0.2
 
@@ -351,17 +350,68 @@ print(f"Log Res Acc: {acc}")
 
 #%% secilen classifier ile test verisinden sonuçları al
 
-clf = RandomForestClassifier(min_samples_leaf=2, n_estimators=100, random_state=0)
+clf = LogisticRegression( C=10 , penalty="l1")
 extractTestResults(clf, x_train, y_train['status_group'], x_test, x_test_or)
 
 
 
 
+#%% 
+trCols = list(x_train.columns)
+cols = ['ward', 'quantity', 'extraction_type', 'installer', 'lga','construction_year', 'waterpoint_type', 'source','district_code','amount_tsh']
+for col in trCols:
+    if col not in cols:
+        xTr = x_train.copy()
+        brc = cols + [(col)]
+        xTr = xTr[brc]
+        print(xTr.columns)
+
+        fold = 0.2
+
+        
+        RF = RandomForestClassifier(random_state=0)
+        acc= modelAcc(RF,xTr, y_train['status_group'],fold)
+        print(f"Random Forest Acc : {acc}")
+
+xTr = x_train[cols]
+xTs = x_test[cols]
+
+clf = RandomForestClassifier(min_samples_leaf=2, n_estimators=100,max_depth=20, random_state=0)
+extractTestResults(clf, x_train, y_train['status_group'], x_test, x_test_or)
 
 
 
+#%% 
+xTr = x_train.copy()
+#xTr = xTr.drop('lga',1)
+xTr = xTr[cols]
+
+depths = [1, 2, 4, 6, 8, 10]
+for d in depths:
+    RF = RandomForestClassifier( min_samples_leaf=d, random_state=0)
+    acc= modelAcc(RF,xTr, y_train['status_group'],fold)
+    print(f"Random Forest Acc for mss {d}: {acc}")
+
+depths = [10, 20, 40, 60, 80, 100, 150, 200]
+for d in depths:
+    RF = RandomForestClassifier( min_samples_leaf=2, n_estimators=d, random_state=0)
+    acc= modelAcc(RF,xTr, y_train['status_group'],fold)
+    print(f"Random Forest Acc for tree {d}: {acc}")
 
 
+depths = [2, 5, 10, 20, 30, 40, 50]
+for d in depths:
+    RF = RandomForestClassifier(min_samples_leaf=2, n_estimators=100,max_depth=d, random_state=0)
+    acc= modelAcc(RF,xTr, y_train['status_group'],fold)
+    print(f"Random Forest Acc for depth {d}: {acc}")
+
+
+#%%
+depths= [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+for d in depths:
+    RF = LogisticRegression( C=d , penalty="l1")
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"Log Res Acc for C {d}: {acc}")
 
 
 #%%
