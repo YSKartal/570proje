@@ -227,12 +227,6 @@ def modelAcc(clf,X,y,fold):
 def extractTestResults(clf, x_train,y_train,x_test,x_test_or):
     testMapping = {1:'functional', 0:'non functional' , 2:'functional needs repair'}
 
-    testCols = x_test.columns
-    trainCols = x_train.columns
-    for trc in trainCols:
-        if trc not in trainCols:
-            x_train.drop(trc)
-
     clf.fit(x_train,y_train)
     y_pre=clf.predict(x_test)
 
@@ -351,7 +345,7 @@ print(f"Log Res Acc: {acc}")
 
 #%% secilen classifier ile test verisinden sonuçları al
 
-clf = RandomForestClassifier(min_samples_leaf=2, n_estimators=100, random_state=0)
+clf = LogisticRegression()
 extractTestResults(clf, x_train, y_train['status_group'], x_test, x_test_or)
 
 
