@@ -241,7 +241,7 @@ def extractTestResults(clf, x_train,y_train,x_test,x_test_or):
     testDf['status_group'] = y_pre
     testDf = testDf.replace({'status_group': testMapping})
     
-    testDf.to_csv("rf2_100"+'.csv', columns=['id','status_group'],index=None,sep=',')
+    testDf.to_csv("lr_oh"+'.csv', columns=['id','status_group'],index=None,sep=',')
     print(f"test result in file {str(clf)+'.csv'}")
 
 
