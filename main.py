@@ -260,11 +260,11 @@ x_train, y_train, x_test = lEncoding(x_train,y_train,x_test)
 x_train = x_train[:35000]
 y_train = y_train[:35000]
 """
-"""colums_to_drop = collect_correlated_variables(x_train,0.9)
+colums_to_drop = collect_correlated_variables(x_train,0.9)
 x_train = remove_columns(x_train,colums_to_drop)
 x_test = remove_columns(x_test,colums_to_drop)
 print('column drop: x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
-"""
+
 columns_to_keep = apply_feature_importance(x_train,y_train,threshold=0.95)
 x_train = keep_columns(x_train,columns_to_keep)
 x_test = keep_columns(x_test,columns_to_keep)
@@ -277,6 +277,7 @@ scaler.fit(x_train)
 x_train = scaler.transform(x_train)
 scaler.fit(x_test)
 x_test = scaler.transform(x_test)
+
 
 #%% classifierları test et
 fold = 0.2
@@ -302,7 +303,6 @@ acc= modelAcc(clf,x_train, y_train['status_group'],fold)
 print(f"DecisionTree  Acc: {acc}")
 #SVML = svm.SVC(kernel='linear')
 
-#%%
 clf = MLPClassifier(hidden_layer_sizes=(300,), random_state=1, activation='logistic', max_iter=200, warm_start=True)
 acc= modelAcc(clf,x_train, y_train['status_group'],fold)
 print(f"MLPClassifier  Acc: {acc}")
