@@ -20,6 +20,8 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn import tree
+from sklearn.multioutput import MultiOutputRegressor
+from sklearn.ensemble import RandomForestRegressor
 
 #%% Gerekli sınıflar
 class DataFrameImputer(TransformerMixin):
@@ -236,7 +238,7 @@ def extractTestResults(clf, x_train,y_train,x_test,x_test_or):
     testDf['status_group'] = y_pre
     testDf = testDf.replace({'status_group': testMapping})
     
-    testDf.to_csv("rf2_100_top10"+'.csv', columns=['id','status_group'],index=None,sep=',')
+    testDf.to_csv("rf1_150_20_sc"+'.csv', columns=['id','status_group'],index=None,sep=',')
     print(f"test result in file {str(clf)+'.csv'}")
 
 
@@ -254,11 +256,11 @@ x_test = sort_wrt_id_drop_id(x_test,'id')
 print('initial: x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
 
 x_train, y_train, x_test = fitTransform(x_train,y_train,x_test)
-#x_train, x_test = ohEncoding(x_train,x_test)
-x_train, y_train, x_test = lEncoding(x_train,y_train,x_test)
+x_train, x_test = ohEncoding(x_train,x_test)
+#x_train, y_train, x_test = lEncoding(x_train,y_train,x_test)
 """
 x_train = x_train[:35000]
-y_train = y_train[:35000]
+y_train = y_train[:35000]"""
 """
 colums_to_drop = collect_correlated_variables(x_train,0.9)
 x_train = remove_columns(x_train,colums_to_drop)
@@ -277,7 +279,7 @@ scaler.fit(x_train)
 x_train = scaler.transform(x_train)
 scaler.fit(x_test)
 x_test = scaler.transform(x_test)
-
+"""
 
 #%% classifierları test et
 fold = 0.2
@@ -286,27 +288,78 @@ LR = LogisticRegression()
 acc= modelAcc(LR,x_train, y_train['status_group'],fold)
 print(f"Log Res Acc: {acc}")
 
-clf = GaussianNB()
+depths= [ 0.01, 0.1, 1, 10]
+for d in depths:
+    RF = LogisticRegression( C=d )
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"Log Res Acc for C {d}: {acc}")
+
+
+"""clf = GaussianNB()
 #acc= modelAcc(clf,x_train, y_train['status_group'],fold)
 print(f"GaussianNB  Acc: {acc}")
-
+"""
 clf = KNeighborsClassifier()
 acc= modelAcc(clf,x_train, y_train['status_group'],fold)
 print(f"KNeighbor  Acc: {acc}")
+depths = [1,3,5,8]
+for d in depths:
+    RF = KNeighborsClassifier(n_neighbors=d)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"knn for depth {d}: {acc}")
 
 RF = RandomForestClassifier(random_state=0)
 acc= modelAcc(RF,x_train, y_train['status_group'],fold)
 print(f"Random Forest Acc : {acc}")
+depths = [1, 2, 4, 8]
+for d in depths:
+    RF = RandomForestClassifier( min_samples_leaf=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"Random Forest Acc for mss {d}: {acc}")
+#%%
+depths = [20, 40, 100, 150]
+for d in depths:
+    RF = RandomForestClassifier( n_estimators=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"Random Forest Acc for tree {d}: {acc}")
+
+depths = [ 10, 20, 30, 40]
+for d in depths:
+    RF = RandomForestClassifier(max_depth=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"Random Forest Acc for depth {d}: {acc}")
+
 
 clf = tree.DecisionTreeClassifier()
 acc= modelAcc(clf,x_train, y_train['status_group'],fold)
 print(f"DecisionTree  Acc: {acc}")
-#SVML = svm.SVC(kernel='linear')
+depths = [1, 2, 4, 8]
+for d in depths:
+    RF = tree.DecisionTreeClassifier( min_samples_leaf=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"DecisionTree Acc for mss {d}: {acc}")
 
+depths = [ 10, 20, 30, 40]
+for d in depths:
+    RF = tree.DecisionTreeClassifier(max_depth=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"DecisionTree Acc for depth {d}: {acc}")
+
+#%%
 clf = MLPClassifier(hidden_layer_sizes=(300,), random_state=1, activation='logistic', max_iter=200, warm_start=True)
 acc= modelAcc(clf,x_train, y_train['status_group'],fold)
 print(f"MLPClassifier  Acc: {acc}")
+depths = [100, 200, 300, 400]
+for d in depths:
+    RF = MLPClassifier(hidden_layer_sizes=(d,), random_state=1)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"MLPClassifier hidden layer size {d}: {acc}")
 
+depths = [ 100, 200, 300, 400]
+for d in depths:
+    RF = MLPClassifier( random_state=1,  max_iter=d )
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"MLPClassifier max iter {d}: {acc}")
 
 #%%
 depths = [1, 2, 4, 6, 8, 10]
@@ -324,7 +377,7 @@ for d in depths:
 
 depths = [2, 5, 10, 20, 30, 40, 50]
 for d in depths:
-    RF = RandomForestClassifier(min_samples_leaf=2, n_estimators=100,max_depth=d, random_state=0)
+    RF = RandomForestClassifier(min_samples_leaf=2, n_estimators=150,max_depth=d, random_state=0)
     acc= modelAcc(RF,x_train, y_train['status_group'],fold)
     print(f"Random Forest Acc for depth {d}: {acc}")
 
@@ -341,12 +394,29 @@ for d in depths:
     acc= modelAcc(RF,x_train, y_train['status_group'],fold)
     print(f"Random Forest Acc for tree {d}: {acc}")
 
+#%%
 
-depths = [2, 5, 10, 20, 30, 40, 50]
+depths = [2, 5, 10, 18,19, 20, 21, 22, 30, 40, 50]
 for d in depths:
     RF = RandomForestClassifier(min_samples_leaf=1, n_estimators=100,max_depth=d, random_state=0)
     acc= modelAcc(RF,x_train, y_train['status_group'],fold)
     print(f"Random Forest Acc for depth {d}: {acc}")
+
+
+#%%
+depths = [1,2,3,4,5,6,7,8,9,10]
+for d in depths:
+    RF = KNeighborsClassifier(n_neighbors=d)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"knn for depth {d}: {acc}")
+
+#%%
+depths =  [2]
+for d in depths:
+    RF = RandomForestClassifier(min_samples_leaf=1, n_estimators=100,max_depth=20, min_samples_split=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"Random Forest Acc for depth {d}: {acc}")
+
 
 #%% mss etkisi az
 clf = GaussianNB()
@@ -356,7 +426,7 @@ print(f"Log Res Acc: {acc}")
 
 #%% secilen classifier ile test verisinden sonuçları al
 
-clf = LogisticRegression( C=10 , penalty="l1")
+clf = RandomForestClassifier(min_samples_leaf=1, n_estimators=150,max_depth=20, random_state=0)
 extractTestResults(clf, x_train, y_train['status_group'], x_test, x_test_or)
 
 
@@ -421,6 +491,20 @@ for d in depths:
 
 
 #%%
+clf = tree.DecisionTreeClassifier()
+acc= modelAcc(clf,x_train, y_train['status_group'],fold)
+print(f"DecisionTree  Acc: {acc}")
+
+depths = [2, 5]
+for d in depths:
+    RF = RandomForestClassifier(min_samples_leaf=1, max_depth=d, random_state=0)
+    acc= modelAcc(clf,x_train, y_train['status_group'],fold)
+    print(f"Random Forest Acc for depth {d}: {acc}")
+
+#%%
+clf =  svm.SVC(kernel='linear')
+cc= modelAcc(clf,x_train, y_train['status_group'],fold)
+print(f"DecisionTree  Acc: {acc}")
 
 #%%
 #Feature Scaling of datasets
