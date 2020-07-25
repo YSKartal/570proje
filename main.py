@@ -24,11 +24,7 @@ from sklearn import tree
 #%% Gerekli sınıflar
 class DataFrameImputer(TransformerMixin):
     def __init__(self):
-        """Impute missing values.
-        Columns of dtype object are imputed with the most frequent value
-        in column.
-        Columns of other types are imputed with mean of column.
-        """
+        """ bos degerleri mean ile doldur    """
     def fit(self, X, y=None):
         self.fill = pd.Series([X[c].value_counts().index[0]
             if X[c].dtype == np.dtype('O') else X[c].mean() for c in X],
@@ -39,14 +35,8 @@ class DataFrameImputer(TransformerMixin):
         return X.fillna(self.fill)
 
 #%% Preprocess vs. için gerekli fonksiyonlar
-def save_df_to_file(data,file):
-    with open(file, 'w') as f:
-        writer = csv.writer(f)
-        writer.writerow(['x', 'y', 'value'])
-        for (n, m), val in np.ndenumerate(data):
-            writer.writerow([n, m, val])
 
-def label_encoding(x_train):
+def labelEnc(x_train):
     train = pd.DataFrame()
     label = LabelEncoder()
     for c in x_train.columns:
@@ -56,138 +46,72 @@ def label_encoding(x_train):
             train[c] = x_train[c]
     return train
 
-def remove_correlated_variables(train,treshold):
-    threshold = 0.9
-    corr_matrix = train.corr().abs()
-    #corr_matrix.head()
-    # Upper triangle of correlations
-    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(np.bool))
-    #upper.head()
-    # Select columns with correlations above threshold
-    to_drop = [column for column in upper.columns if any(upper[column] > threshold)]
-    train = train.drop(columns=to_drop)
-    return  train
 
-def one_hot_encoding(x_train):
+def oneHotEnd(x_train):
     one = OneHotEncoder()
     one.fit(x_train)
     train = one.transform(x_train)
     print('----train data set has got {} rows and {} columns'.format(train.shape[0], train.shape[1]))
     return train
 
-def feature_hasher(x_train):
-    X_train_hash = x_train.copy()
-    for c in x_train.columns:
-        X_train_hash[c] = x_train[c].astype('str')
-    hashing = FeatureHasher(input_type='string')
-    train = hashing.transform(X_train_hash.values)
-    return train
 
-def sort_wrt_id_drop_id(train,id_column_name):
-    #train.sort_values(id_column_name)
+def dropId(train,id_column_name):
     return  train.drop(columns=[id_column_name])
 
-def collect_correlated_variables(train,treshold):
+def findCossVars(train,treshold):
     threshold = 0.9
     corr_matrix = train.corr().abs()
-    #corr_matrix.head()
-    # Upper triangle of correlations
     upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(np.bool))
-    #upper.head()
-    # Select columns with correlations above threshold
     to_drop = [column for column in upper.columns if any(upper[column] > threshold)]
     print('There are %d columns to remove.' % (len(to_drop)))
     return to_drop
 
 
-def identify_zero_importance_features(train, train_labels, iterations=2):
+def findZeroImpFeatures(train, train_labels, iterations=2):
     train_labels_ravel = train_labels.values.ravel()
-    """
-    Identify zero importance features in a training dataset based on the
-    feature importances from a gradient boosting model.
-
-    Parameters
-    --------
-    train : dataframe
-        Training features
-
-    train_labels : np.array
-        Labels for training data
-
-    iterations : integer, default = 2
-        Number of cross validation splits to use for determining feature importances
-    """
-
-    # Initialize an empty array to hold feature importances
     feature_importances = np.zeros(train.shape[1])
 
-    # Create the model with several hyperparameters
     model = lgb.LGBMClassifier(objective='binary', boosting_type='goss', n_estimators=10000, class_weight='balanced')
 
-    # Fit the model multiple times to avoid overfitting
     for i in range(iterations):
-        # Split into training and validation set
         train_features, valid_features, train_y, valid_y = train_test_split(train, train_labels_ravel, test_size=0.25,
                                                                             random_state=i)
 
-        # Train using early stopping
         model.fit(train_features, train_y, early_stopping_rounds=100, eval_set=[(valid_features, valid_y)],
                   eval_metric='multi_logloss', verbose=200)
-    #eval function internette auc idi hata verdi, multi_logloss yaptim, arity de oluyormus
-        # Record the feature importances
         feature_importances += model.feature_importances_ / iterations
 
     feature_importances = pd.DataFrame({'feature': list(train.columns), 'importance': feature_importances}).sort_values(
         'importance', ascending=False)
 
-    # Find the features with zero importance
     zero_features = list(feature_importances[feature_importances['importance'] == 0.0]['feature'])
     print('\nThere are %d features with 0.0 importance' % len(zero_features))
 
     return zero_features, feature_importances
 
 
-def take_feature_importances(df, threshold=0.9):
-    """
-    Plots 15 most important features and the cumulative importance of features.
-    Prints the number of features needed to reach threshold cumulative importance.
+def takeFI(df, threshold=0.9):
 
-    Parameters
-    --------
-    df : dataframe
-        Dataframe of feature importances. Columns must be feature and importance
-    threshold : float, default = 0.9
-        Threshold for prining information about cumulative importances
-
-    Return
-    --------
-    df : dataframe
-        Dataframe ordered by feature importances with a normalized column (sums to 1)
-        and a cumulative importance column
-
-    """
-
-    # Sort features according to importance
     df = df.sort_values('importance', ascending=False).reset_index()
 
-    # Normalize the feature importances to add up to one
     df['importance_normalized'] = df['importance'] / df['importance'].sum()
     df['cumulative_importance'] = np.cumsum(df['importance_normalized'])
     importance_index = np.min(np.where(df['cumulative_importance'] > threshold))
     print('%d features required for %0.2f of cumulative importance' % (importance_index , threshold))
     return df
 
-def keep_columns(train,keep_columns):
-    return train[keep_columns]
+def keepColumns(train,keepColumns):
+    return train[keepColumns]
 
-def apply_feature_importance(train,train_labels,threshold):
-    second_round_zero_features, feature_importances = identify_zero_importance_features(train, train_labels)
-    norm_feature_importances = take_feature_importances(feature_importances, threshold=0.95)
+def applyFI(train,train_labels,threshold):
+    second_round_zero_features, feature_importances = findZeroImpFeatures(train, train_labels)
+    norm_feature_importances = takeFI(feature_importances, threshold=0.95)
     features_to_keep = list(
         norm_feature_importances[norm_feature_importances['cumulative_importance'] < threshold]['feature'])
     return features_to_keep
 
-def remove_columns(train,to_drop):
+def removeColumns(train,to_drop):
+    print(to_drop)
     train = train.drop(columns=to_drop)
     return train
 
@@ -198,23 +122,24 @@ def fitTransform(x_train, y_train, x_test):
     return x1, y1, x2
     print("fit transform done")
 
+# one hot encode train ve test beraber
 def ohEncoding(x_train, x_test):
-    result = one_hot_encoding(pd.concat([x_train,x_test]))
-    """x1 = one_hot_encoding(x_train)
-    x2 = one_hot_encoding(x_test)"""
+    result = oneHotEnd(pd.concat([x_train,x_test]))
+    """x1 = oneHotEnd(x_train)
+    x2 = oneHotEnd(x_test)"""
     x1 = result[:59400,:]
     x2 = result[59400:,:]
     print("one hot encoding done")
     return x1, x2
 
 def lEncoding(x_train, y_train, x_test):
-    x1 = label_encoding(x_train)
-    y1 = label_encoding(y_train)
-    x2 = label_encoding(x_test)
+    x1 = labelEnc(x_train)
+    y1 = labelEnc(y_train)
+    x2 = labelEnc(x_test)
     print("label encoding done")
     return x1, y1, x2
 
-#%% model fonksiyonları
+#%% train acc hesaplama 5 fold ile
 def modelAcc(clf,X,y,fold):
     X_train,X_test,y_train,y_test=train_test_split(X,y,random_state=42,test_size=fold)
     clf.fit(X_train,y_train)
@@ -223,7 +148,7 @@ def modelAcc(clf,X,y,fold):
     #print(f'Accuracy : {acc}',)
     return acc
 
-
+# test verisinden predictionları alıp dosyaya çıkar
 def extractTestResults(clf, x_train,y_train,x_test,x_test_or):
     testMapping = {1:'functional', 0:'non functional' , 2:'functional needs repair'}
 
@@ -236,42 +161,47 @@ def extractTestResults(clf, x_train,y_train,x_test,x_test_or):
     testDf['status_group'] = y_pre
     testDf = testDf.replace({'status_group': testMapping})
     
-    testDf.to_csv("rf2_100_top10"+'.csv', columns=['id','status_group'],index=None,sep=',')
-    print(f"test result in file {str(clf)+'.csv'}")
+    
+    submission = "submission.csv"
+    testDf.to_csv(submission, columns=['id','status_group'],index=None,sep=',')
+    print(f"test result for {str(clf)} in file {submission}")
 
 
-#%%  verileri oku
+
+#%%  verileri oku 
 x_train = pd.read_csv("piu_train.csv")
 y_train = pd.read_csv("piu_train_label.csv")
 x_test = pd.read_csv("piu_test.csv")
 x_test_or = pd.read_csv("piu_test.csv")
 mapping = {'functional': 1, 'non functional': 0, 'functional needs repair':2}
 y_train = y_train.replace({'status_group': mapping})
-x_train = sort_wrt_id_drop_id(x_train,'id')
-y_train = sort_wrt_id_drop_id(y_train,'id')
-x_test = sort_wrt_id_drop_id(x_test,'id')
+x_train = dropId(x_train,'id')
+y_train = dropId(y_train,'id')
+x_test = dropId(x_test,'id')
 
-print('initial: x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
+print('x_train: {} rows {} columns; x_test {} rows {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
 
+###################### encoding sec: one hot=ohEncoding; label=lEncoding ###############################
 x_train, y_train, x_test = fitTransform(x_train,y_train,x_test)
 #x_train, x_test = ohEncoding(x_train,x_test)
 x_train, y_train, x_test = lEncoding(x_train,y_train,x_test)
+
+###################### drop feature selection yapmak icin #######################################
+"""colums_to_drop = findCossVars(x_train,0.9)
+x_train = removeColumns(x_train,colums_to_drop)
+x_test = removeColumns(x_test,colums_to_drop)
+print('drop: x_train {} rows {} columns; x_test {} rows {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))"""
+
+###################### keep feature selection yapmak icin #######################################
+"""columns_to_keep = applyFI(x_train,y_train,threshold=0.90)
+x_train = keepColumns(x_train,columns_to_keep)
+x_test = keepColumns(x_test,columns_to_keep)
+print(list(x_train.columns))
+print('keep: x_train  {} rows and {} columns; x_test {} rows {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
 """
-x_train = x_train[:35000]
-y_train = y_train[:35000]
-"""
-colums_to_drop = collect_correlated_variables(x_train,0.9)
-x_train = remove_columns(x_train,colums_to_drop)
-x_test = remove_columns(x_test,colums_to_drop)
-print('column drop: x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
-
-columns_to_keep = apply_feature_importance(x_train,y_train,threshold=0.95)
-x_train = keep_columns(x_train,columns_to_keep)
-x_test = keep_columns(x_test,columns_to_keep)
-
-print('x_train data set has got {} rows and {} columns and x_test data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
 
 
+######################## scale data 0 1 arasında ################################################
 scaler = StandardScaler() 
 scaler.fit(x_train)
 x_train = scaler.transform(x_train)
@@ -282,175 +212,68 @@ x_test = scaler.transform(x_test)
 #%% classifierları test et
 fold = 0.2
 
-LR = LogisticRegression()
-acc= modelAcc(LR,x_train, y_train['status_group'],fold)
-print(f"Log Res Acc: {acc}")
-
-clf = GaussianNB()
-#acc= modelAcc(clf,x_train, y_train['status_group'],fold)
-print(f"GaussianNB  Acc: {acc}")
-
-clf = KNeighborsClassifier()
-acc= modelAcc(clf,x_train, y_train['status_group'],fold)
-print(f"KNeighbor  Acc: {acc}")
-
-RF = RandomForestClassifier(random_state=0)
-acc= modelAcc(RF,x_train, y_train['status_group'],fold)
-print(f"Random Forest Acc : {acc}")
-
-clf = tree.DecisionTreeClassifier()
-acc= modelAcc(clf,x_train, y_train['status_group'],fold)
-print(f"DecisionTree  Acc: {acc}")
-#SVML = svm.SVC(kernel='linear')
-
-clf = MLPClassifier(hidden_layer_sizes=(300,), random_state=1, activation='logistic', max_iter=200, warm_start=True)
-acc= modelAcc(clf,x_train, y_train['status_group'],fold)
-print(f"MLPClassifier  Acc: {acc}")
-
-
-#%%
-depths = [1, 2, 4, 6, 8, 10]
+depths= [ 0.01, 0.1, 1, 10]
 for d in depths:
-    RF = RandomForestClassifier( min_samples_leaf=d, random_state=0)
-    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
-    print(f"Random Forest Acc for mss {d}: {acc}")
-
-depths = [10, 20, 40, 60, 80, 100, 150, 200]
-for d in depths:
-    RF = RandomForestClassifier( min_samples_leaf=2, n_estimators=d, random_state=0)
-    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
-    print(f"Random Forest Acc for tree {d}: {acc}")
-
-
-depths = [2, 5, 10, 20, 30, 40, 50]
-for d in depths:
-    RF = RandomForestClassifier(min_samples_leaf=2, n_estimators=100,max_depth=d, random_state=0)
-    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
-    print(f"Random Forest Acc for depth {d}: {acc}")
-
-#%%
-depths = [1, 2, 4, 6, 8, 10]
-for d in depths:
-    RF = RandomForestClassifier( min_samples_leaf=d, random_state=0)
-    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
-    print(f"Random Forest Acc for mss {d}: {acc}")
-
-depths = [10, 20, 40, 60, 80, 100, 150, 200]
-for d in depths:
-    RF = RandomForestClassifier( min_samples_leaf=1, n_estimators=d, random_state=0)
-    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
-    print(f"Random Forest Acc for tree {d}: {acc}")
-
-
-depths = [2, 5, 10, 20, 30, 40, 50]
-for d in depths:
-    RF = RandomForestClassifier(min_samples_leaf=1, n_estimators=100,max_depth=d, random_state=0)
-    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
-    print(f"Random Forest Acc for depth {d}: {acc}")
-
-#%% mss etkisi az
-clf = GaussianNB()
-acc= modelAcc(clf,x_train, y_train['status_group'],0.2)
-print(f"Log Res Acc: {acc}")
-
-
-#%% secilen classifier ile test verisinden sonuçları al
-
-clf = LogisticRegression( C=10 , penalty="l1")
-extractTestResults(clf, x_train, y_train['status_group'], x_test, x_test_or)
-
-
-
-
-#%% 
-trCols = list(x_train.columns)
-cols = ['ward', 'quantity', 'extraction_type', 'installer', 'lga','construction_year', 'waterpoint_type', 'source','district_code','amount_tsh']
-for col in trCols:
-    if col not in cols:
-        xTr = x_train.copy()
-        brc = cols + [(col)]
-        xTr = xTr[brc]
-        print(xTr.columns)
-
-        fold = 0.2
-
-        
-        RF = RandomForestClassifier(random_state=0)
-        acc= modelAcc(RF,xTr, y_train['status_group'],fold)
-        print(f"Random Forest Acc : {acc}")
-
-xTr = x_train[cols]
-xTs = x_test[cols]
-
-clf = RandomForestClassifier(min_samples_leaf=2, n_estimators=100,max_depth=20, random_state=0)
-extractTestResults(clf, x_train, y_train['status_group'], x_test, x_test_or)
-
-
-
-#%% 
-xTr = x_train.copy()
-#xTr = xTr.drop('lga',1)
-xTr = xTr[cols]
-
-depths = [1, 2, 4, 6, 8, 10]
-for d in depths:
-    RF = RandomForestClassifier( min_samples_leaf=d, random_state=0)
-    acc= modelAcc(RF,xTr, y_train['status_group'],fold)
-    print(f"Random Forest Acc for mss {d}: {acc}")
-
-depths = [10, 20, 40, 60, 80, 100, 150, 200]
-for d in depths:
-    RF = RandomForestClassifier( min_samples_leaf=2, n_estimators=d, random_state=0)
-    acc= modelAcc(RF,xTr, y_train['status_group'],fold)
-    print(f"Random Forest Acc for tree {d}: {acc}")
-
-
-depths = [2, 5, 10, 20, 30, 40, 50]
-for d in depths:
-    RF = RandomForestClassifier(min_samples_leaf=2, n_estimators=100,max_depth=d, random_state=0)
-    acc= modelAcc(RF,xTr, y_train['status_group'],fold)
-    print(f"Random Forest Acc for depth {d}: {acc}")
-
-
-#%%
-depths= [0.001, 0.01, 0.1, 1, 10, 100, 1000]
-for d in depths:
-    RF = LogisticRegression( C=d , penalty="l1")
+    RF = LogisticRegression( C=d )
     acc= modelAcc(RF,x_train, y_train['status_group'],fold)
     print(f"Log Res Acc for C {d}: {acc}")
 
-
-#%%
-
-#%%
-#Feature Scaling of datasets
-"""st_x= StandardScaler(with_mean=False)
-x_train= st_x.fit_transform(x_train)
-print(' X train data set has got {} rows and {} columns'.format(x_train.shape[0],x_train.shape[1]))
-X_train = st_x.transform(x_train)
-#X_test = st_x.transform(x_test)
-#y_train= st_x.fit_transform(y_train)
-print('y_train data set has got {} rows and {} columns'.format(y_train.shape[0],y_train.shape[1]))
-"""
-
-"""
-def testClassifier(clf, X, y, fold):
-    LR = LogisticRegression()
-    acc= modelAcc(LR,X,y,fold)
-    print(f"Log Res Acc: {acc}")
-
-    #SVML = svm.SVC(kernel='linear')
-
-    depths = [2, 5, 10, 20, 30]
-    for d in depths:
-        RF = RandomForestClassifier(max_depth=d, random_state=0)
-        acc= modelAcc(RF,X,y,fold)
-        print(f"Random Forest Acc for depth {d}: {acc}")
-"""
-#%%
+depths = [1,3,5,8]
+for d in depths:
+    RF = KNeighborsClassifier(n_neighbors=d)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"knn for depth {d}: {acc}")
 
 
+depths = [1, 2, 4, 8]
+for d in depths:
+    RF = RandomForestClassifier( min_samples_leaf=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"Random Forest Acc for mss {d}: {acc}")
 
+
+depths = [20, 40, 100, 150]
+for d in depths:
+    RF = RandomForestClassifier( n_estimators=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"Random Forest Acc for tree {d}: {acc}")
+
+depths = [ 10, 20, 30, 40]
+for d in depths:
+    RF = RandomForestClassifier(max_depth=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"Random Forest Acc for depth {d}: {acc}")
+
+depths = [1, 2, 4, 8]
+for d in depths:
+    RF = tree.DecisionTreeClassifier( min_samples_leaf=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"DecisionTree Acc for mss {d}: {acc}")
+
+depths = [ 10, 20, 30, 40]
+for d in depths:
+    RF = tree.DecisionTreeClassifier(max_depth=d, random_state=0)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"DecisionTree Acc for depth {d}: {acc}")
+
+
+depths = [100, 200, 300, 400]
+for d in depths:
+    RF = MLPClassifier(hidden_layer_sizes=(d,), random_state=1)
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"MLPClassifier hidden layer size {d}: {acc}")
+
+
+depths = [ 100, 200, 300, 400]
+for d in depths:
+    RF = MLPClassifier( random_state=1,  max_iter=d )
+    acc= modelAcc(RF,x_train, y_train['status_group'],fold)
+    print(f"MLPClassifier max iter {d}: {acc}")
+
+
+#%% secilen classifier ile test verisinden sonuçları al
+clf = RandomForestClassifier(min_samples_leaf=1, n_estimators=150,max_depth=20, random_state=0)
+extractTestResults(clf, x_train, y_train['status_group'], x_test, x_test_or)
 
 
 
