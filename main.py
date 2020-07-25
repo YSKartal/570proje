@@ -20,6 +20,10 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn import tree
+import warnings
+
+
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 #%% Gerekli sınıflar
 class DataFrameImputer(TransformerMixin):
@@ -167,7 +171,7 @@ def extractTestResults(clf, x_train,y_train,x_test,x_test_or):
     print(f"test result for {str(clf)} in file {submission}")
 
 
-
+############################################################################################
 #%%  verileri oku 
 x_train = pd.read_csv("piu_train.csv")
 y_train = pd.read_csv("piu_train_label.csv")
@@ -181,8 +185,8 @@ x_test = dropId(x_test,'id')
 
 print('x_train: {} rows {} columns; x_test {} rows {} columns'.format(x_train.shape[0],x_train.shape[1],x_test.shape[0],x_test.shape[1]))
 
-###################### encoding sec: one hot=ohEncoding; label=lEncoding ###############################
 x_train, y_train, x_test = fitTransform(x_train,y_train,x_test)
+###################### encoding sec: one hot=ohEncoding; label=lEncoding ###############################
 #x_train, x_test = ohEncoding(x_train,x_test)
 x_train, y_train, x_test = lEncoding(x_train,y_train,x_test)
 
